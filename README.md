@@ -6,9 +6,9 @@ This project is done in a group effort for UC Berkeley CS162: Operating System c
 
 ## Specs & Design Documents
 
-* **Part 1: ThreadsI**: (spec)(specs/proj1.pdf), (design doc)[design-doc/threads.md]
-* **Part 2: User ProgramsI**: (spec)(specs/proj2.pdf), (design doc)[design-doc/user-programs.md]
-* **Part 3: File SystemsI**: (spec)(specs/proj3.pdf), (design doc)[design-doc/file-systems.md]
+* **Part 1: ThreadsI**: [spec](specs/proj1.pdf), [design doc](design-doc/threads.md)
+* **Part 2: User ProgramsI**: [spec](specs/proj2.pdf), [design doc](design-doc/user-programs.md)
+* **Part 3: File SystemsI**: [spec](specs/proj3.pdf), [design doc](design-doc/file-systems.md)
 
 
 ## Dependencies
