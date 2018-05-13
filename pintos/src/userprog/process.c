@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+static struct semaphore temporary;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -32,6 +33,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
+  sema_init (&temporary, 0);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -39,13 +41,8 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  char* index;
-  char file_name_copy[128];
-  strlcpy(file_name_copy, file_name, 128);
-  char *name = strtok_r(file_name_copy, " ", &index);
-
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -66,8 +63,6 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  thread_current()->data->load_status = success ? 1 : -1;
-  sema_up(&thread_current()->data->loaded);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -94,33 +89,10 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid)
-{ struct child_data* cd;
-  struct list_elem *e;
-  enum intr_level old_level;
-  int exit_status;
-
-  old_level = intr_disable ();
-  for (e = list_begin (&thread_current()->children); 
-       e != list_end (&thread_current()->children); 
-       e = list_next (e))
-  {
-      cd = list_entry (e, struct child_data, elem);
-      if (cd->tid == child_tid) {
-        sema_down(&cd->terminated);
-        list_remove(&cd->elem);
-        intr_set_level (old_level);
-        exit_status = cd->status;
-        if (cd->ref_cnt == 1) {
-          free(cd);
-        } else {
-          cd->ref_cnt--;
-        }
-        return exit_status;
-      }
-  }
-  intr_set_level (old_level);
-  return -1;
+process_wait (tid_t child_tid UNUSED)
+{
+  sema_down (&temporary);
+  return 0;
 }
 
 /* Free the current process's resources. */
@@ -129,20 +101,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
-  // Close all associated file descriptors to the current thread and free memory
-  struct list_elem *e;
-  enum intr_level old_level;
-
-
-  old_level = intr_disable ();
-  while (!list_empty (&cur->file_mappings)) {
-    struct list_elem *e = list_front (&cur->file_mappings);
-    struct fd_file_mapping *f = list_entry (e, struct fd_file_mapping, elem);
-    close(f->fd);
-  }
-  intr_set_level (old_level);
-
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -160,31 +118,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-  sema_up(&cur->data->terminated);
-
-
-  old_level = intr_disable ();
-  while (!list_empty (&cur->children)) {
-    struct list_elem *e = list_pop_front (&cur->children);
-    struct child_data *cd = list_entry (e, struct child_data, elem);
-    if (cd->ref_cnt == 1) {
-      free(cd);
-    } else {
-      cd->ref_cnt--;
-    }
-  }
-  intr_set_level (old_level);
-
-
-  if (cur->data->ref_cnt == 1) {
-    free(cur->data);
-  } else {
-    cur->data->ref_cnt--;
-  }
-
-  file_close (cur->executable);
-
+  sema_up (&temporary);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -279,13 +213,6 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp)
 {
-  char file_copy[128];
-  strlcpy(file_copy, file_name, 128);
-  char *index;
-  char *token = strtok_r(file_copy, " ", &index);
-
-  char *name = token;
-
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -300,14 +227,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (name);
+  file = filesys_open (file_name);
   if (file == NULL)
-  {
-    printf ("load: %s: open failed\n", name);
-    goto done;
-  }
-  t->executable = file;
-  file_deny_write (file);
+    {
+      printf ("load: %s: open failed\n", file_name);
+      goto done;
+    }
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -317,10 +242,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_version != 1
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024)
-  {
-    printf ("load: %s: error loading executable\n", name);
-    goto done;
-  }
+    {
+      printf ("load: %s: error loading executable\n", file_name);
+      goto done;
+    }
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -380,61 +305,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
           break;
         }
     }
+
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
 
-  // Assuming arguments never reach more than 128 in the tests
-  int argc = 0;
-  char* argv_value[64];
-  void* argv_address[64];
-
-  int length;
-  for (; token != NULL; token = strtok_r(NULL, " ", &index)) {
-    argv_value[argc] = token;
-    argc += 1;
-  }
-
-  for(i=argc-1; i>=0; i--){
-    length = strlen(argv_value[i])+1;
-    *esp -= length;
-    memcpy(*esp, argv_value[i], length);
-    argv_address[i] = *esp;
-  }
-  // Word Align
-  int mod4 = ((uint32_t)(*esp))%4;
-  (*esp)-=mod4;
-  memset(*esp, 0, mod4);
-  
-  // For the last element of argv[i] (null pointer)
-  (*esp)-=4;
-  memset(*esp, 0, 4);
-
-  // Stack addresses for all the inserted arv[i]
-  for(i=argc-1; i>=0; i--){
-    (*esp)-=4;
-    memcpy(*esp, &argv_address[i], 4);
-  }
-
-  // Address of argv
-  void* argvloc = *esp;
-  *esp-=4;
-  memcpy(*esp, &argvloc,4);
-
-  // Argc
-  *esp-=4;
-  *((int*)(*esp)) = argc;
-
-  // Return Address set to NULL
-  *esp-=4;
-  memset(*esp, 0, 4);
-
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-  
+
   success = true;
 
  done:
+  /* We arrive here whether the load is successful or not. */
+  file_close (file);
   return success;
 }
 

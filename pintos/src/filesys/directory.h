@@ -27,25 +27,4 @@ bool dir_add (struct dir *, const char *name, block_sector_t);
 bool dir_remove (struct dir *, const char *name);
 bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 
-/* Part 3 */
-
-/* Walks the directory tree according to PATH. 
-   On success, return the terminating directory (opened)
-   and save the filename to FILENAME. On failure, return NULL */
-struct dir *dir_walk(char *path, char **filename);
-
-/* Walks the path given and checks if the last entry is
-   a directory. If it is, open it and return it. Else,
-   return NULL. */
-struct dir *dir_walk_chdir(char *path);
-
-/* Return true if directory is empty. */
-bool dir_empty(struct dir *dir);
-
-/* Return position in directory */
-int dir_get_position(struct dir *dir);
-/* Set position in directory */
-void dir_set_position(struct dir *dir, int pos);
-
-
 #endif /* filesys/directory.h */

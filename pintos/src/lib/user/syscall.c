@@ -188,33 +188,3 @@ inumber (int fd)
 {
   return syscall1 (SYS_INUMBER, fd);
 }
-
-int
-cache_hits ()
-{
-  return syscall0 (SYS_CACHEHITS);
-}
-
-int
-cache_tries ()
-{
-  return syscall0 (SYS_CACHETRIES);
-}
-
-int
-disk_reads ()
-{
-  return syscall0 (SYS_DISKREADS);
-}
-
-int
-disk_writes ()
-{
-  return syscall0 (SYS_DISKWRITES);
-}
-
-void
-cache_reset ()
-{
-  return syscall0 (SYS_CACHERESET);
-}

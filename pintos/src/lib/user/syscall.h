@@ -45,10 +45,5 @@ bool mkdir (const char *dir);
 bool readdir (int fd, char name[READDIR_MAX_LEN + 1]);
 bool isdir (int fd);
 int inumber (int fd);
-int cache_hits (void);
-int cache_tries (void);
-int disk_reads (void);
-int disk_writes (void);
-void cache_reset (void);
 
 #endif /* lib/user/syscall.h */

@@ -81,8 +81,6 @@ kill (struct intr_frame *f)
 
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
-  //printf("Bad OS B01\n");
-  thread_current()->data->status = -1;
   switch (f->cs)
     {
     case SEL_UCSEG:
@@ -91,10 +89,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      //printf("I go here before dying on Bad-*.c tests\n");
-      // Should exit the whole program for the Bad-*.c tests
-      exit(-1);
-      //thread_exit ();
+      thread_exit ();
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -107,7 +102,6 @@ kill (struct intr_frame *f)
     default:
       /* Some other code segment?  Shouldn't happen.  Panic the
          kernel. */
-      //printf("I should not go here.\n");
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
              f->vec_no, intr_name (f->vec_no), f->cs);
       thread_exit ();
@@ -132,6 +126,7 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -161,7 +156,6 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
-  //printf("Bad-* Tests Goes Here\n");
   kill (f);
 }
 

@@ -7,8 +7,6 @@
 #include "threads/synch.h"
 #include "threads/fixed-point.h"
 
-typedef uint32_t block_sector_t;
-
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -96,52 +94,22 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int effective_priority;             /* Effective priority of the thread. */
+    struct lock *lock_waiting;          /* The lock the current thread is waiting on or NULL. */
+    struct list locks_holding;          /* A list of the locks the current thread is holding. */
+    int64_t wakeup_tick;                /* Keeps track of when the thread should wake up. */
+    int nice;                           /* Nice value for MLFQS. */
+    fixed_point_t recent_cpu;           /* Recent CPU for MLFQS. */
+    
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-
-    /* For Part 2 Syscalls, especially Wait() and Exec() */
-    struct list children;       /* a list of child_data for all children of this thread */
-    struct child_data *data;    /* a pointer to the child_data of this thread, stored in the parent process's children list, if any parent. */
-
-    /* For Part 3 File Syscalls */
-    struct file *executable;
-    struct list file_mappings;
-    int last_fd;
 #endif
-
-    #ifdef FILESYS
-      block_sector_t cur_dir;    /* The block_sector_t for the current directory of this process. */
-    #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
-
-/* Information about the child process, used for process control syscalls */
-struct child_data {
-    tid_t tid;                  /* child process's tid and/or pid  */
-    int status;                 /* child process's exit status */
-    int load_status;            /* 1 if child loaded executables successfully; 0 
-                                  if the load  procedure hasn't been called; -1 if failed */
-    int ref_cnt;                /* 0 if both children and parent are dead;
-                                   1 if either children and parent are dead;
-                                   2 if both children and parent are alive .*/
-    struct semaphore loaded;    /* semaphore on whether the child has loaded executables */
-    struct semaphore terminated;/* semaphore on whether the child has terminated */
-    struct list_elem elem;      /* list elem used for linking in a list */
-};
-
-
-/* Mapping between file descriptors and files, used for file operation syscalls */
-struct fd_file_mapping{
-    int fd;                 /* the file descriptor */
-    struct file* file;      /* the file structure object */
-    struct list_elem elem;  /* list elem used to link the structure in a list */
-    bool is_dir;            /* True if fd points to a directory. */
-};
-
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -178,5 +146,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Functions added for Project 1. */
+list_less_func thread_less;
+int thread_get_max_priority(void);
 
 #endif /* threads/thread.h */

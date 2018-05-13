@@ -3,7 +3,6 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 
-
 /* An open file. */
 struct file
   {
@@ -167,15 +166,3 @@ file_tell (struct file *file)
   ASSERT (file != NULL);
   return file->pos;
 }
-
-/* Return true if file is a directory. */
-bool
-file_isdir (struct file *file) {
-  return inode_isdir(file->inode);
-}
-
-/* Return position in file */
-int file_get_position(struct file *file) {
-  return file->pos;
-}
-

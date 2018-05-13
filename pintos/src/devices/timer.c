@@ -30,6 +30,12 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+
+/* Keeps track of the list of sleeping threads, in the ascending order of
+   when the thread should wake up timeline wise. */
+struct list sleeping_threads;
+
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -37,6 +43,19 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init(&sleeping_threads);
+}
+
+/* Returns 1 if max wakes up earlier than e. */
+bool
+timer_less (const struct list_elem *max, const struct list_elem *e, void *aux)
+{
+  struct thread *max_thread = list_entry (max, struct thread, elem);
+  struct thread *e_thread = list_entry (e, struct thread, elem);
+  if (e_thread->wakeup_tick > max_thread->wakeup_tick)
+    return 1;
+  else
+    return 0;
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -92,8 +111,16 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks)
-    thread_yield ();
+  if (ticks <= 0) {
+    return;
+  }
+  
+  enum intr_level old_level = intr_disable ();
+  thread_current()->wakeup_tick = ticks + start;
+  list_insert_ordered(&sleeping_threads, &thread_current()->elem, timer_less, NULL);
+  thread_block();
+  intr_set_level (old_level);
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +199,16 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  
+  enum intr_level old_level = intr_disable ();
+  int64_t start = timer_ticks ();
+  while (!list_empty(&sleeping_threads) && 
+          list_entry(list_front(&sleeping_threads), 
+                              struct thread, elem)->wakeup_tick <= start) {
+    thread_unblock(
+        list_entry(list_pop_front(&sleeping_threads), struct thread, elem));
+  }
+  intr_set_level (old_level);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -244,3 +281,5 @@ real_time_delay (int64_t num, int32_t denom)
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
 }
+
+
